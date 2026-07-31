@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# Coverage configuration — single source of truth for all `cargo tarpaulin`
+# invocations (CI, Makefile, local). Auto-read from the repo root.
+#
+# `ignore-tests = true` excludes test functions from the coverage metric:
+# coverage must reflect REAL (production) code being exercised, not test
+# code counting itself. The 100% target therefore measures production code.
+#
+# NOTE: the trace engine is selected on the command line (`--engine llvm`), not
+# here — tarpaulin rejects an `engine` key in this file. The source-based llvm
+# engine is required because the default ptrace engine systematically
+# under-attributes executed lines on this codebase (e.g. parser 473/549 vs
+# llvm's 549/549) and miscounts integration-test files, so it never reaches the
+# 100% gate even when every line is exercised. It needs the `llvm-tools` rustup
+# component, declared in rust-toolchain.toml.
+[default]
+engine = "Llvm"
+ignore-tests = true
+out = ["Stdout", "Xml"]
+
+# Exclude ONLY genuinely host-untestable entry/ABI boilerplate from the 100%
+# metric — NOT a way to dodge testing real logic (all real logic is unit-tested
+# and still counts). Globs are relative to the repo root under the `crates/`
+# workspace layout.
+#   * `crates/*/src/main.rs`        — CLI binary entry points (argv/stdin/
+#                                     `process::exit`); each satellite's real
+#                                     logic lives in its `lib.rs`, which IS
+#                                     measured and tested. A `cargo test` cannot
+#                                     exercise `main.rs` without spawning a
+#                                     subprocess.
+#   * `crates/ignorefile-wasm/src/lib.rs`
+#                                   — `#[wasm_bindgen]` export delegates; they
+#                                     need a WebAssembly runtime to run. All real
+#                                     logic lives in the core crate, which IS
+#                                     measured and tested.
+# This list is now the ONLY exclusion list. It used to have to stay
+# byte-identical to an `IGNORE` regex in mise.toml's `[tasks.llvm-cov]`, because
+# two engines gated the same tree and a file excluded from one but not the other
+# made the verdict depend on which one ran. That second engine is gone: every
+# gate runs `mise run coverage:tarpaulin`, so there is one list and one verdict.
+exclude-files = ["crates/*/src/main.rs", "crates/ignorefile-wasm/src/lib.rs"]

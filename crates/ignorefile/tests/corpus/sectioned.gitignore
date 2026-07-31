@@ -1,0 +1,17 @@
+## Cargo
+/target
+
+## Mise
+/mise.local.toml
+!mise.lock
+
+## Logs
+*.log
+!important.log
+
+## Editors
+/.idea/
+/.vscode/
+*.iml
+
+## Always Add

@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[package]
+authors.workspace = true
+categories.workspace = true
+description = "WebAssembly bindings for ignorefile"
+documentation.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+name = "ignorefile-wasm"
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+ignorefile = { path = "../ignorefile", version = "0.1.0" }
+wasm-bindgen = { workspace = true }
+
+# `cdylib` is what `wasm-pack` turns into a `.wasm` module; `rlib` keeps the
+# crate usable from Rust tests on the host.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true

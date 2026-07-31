@@ -1,0 +1,121 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+### Ignored
+
+## Git
+
+# Git worktrees
+# One worktree per feature branch, per AGENTS.md.
+/worktree/
+/.worktree/
+/worktrees/
+/.worktrees/
+
+## AI
+
+# Agents
+!AGENTS.md
+
+# Claude Code
+/**/.claude/
+/**/claude.local.json
+
+# OpenCode
+/**/opencode.json
+
+## Rust and Cargo
+
+# Project/Workspaces Directories Ignores
+/**/target
+
+## Project/Workspaces Test Files Ignores
+
+# Coverage artifacts
+# Written by `mise run coverage`, `llvm-cov`, `tarpaulin`, `codecov`.
+/**/*.profraw
+/**/cobertura.xml
+/**/lcov.info
+/**/results.sarif
+/**/tarpaulin-report.*
+
+## Rust Benchmark and Performance Files
+
+# Profiling artifacts
+# Written by `mise run flame`, `bench`, `pgo`.
+/flamegraph.svg
+/perf.data
+/perf.data.old
+
+## Rust Fuzz Files
+
+# Fuzzing and mutation-testing artifacts
+/fuzz/artifacts/
+/fuzz/corpus/
+/mutants.out/
+/mutants.out.old/
+
+## Rust Supply Chains
+
+# Supply-chain scratch
+# `mise run vet` creates this; the audited facts live in supply-chain/*.toml.
+/supply-chain/.cargo-vet/
+
+# Cargo Binaries and artifacts
+/comply
+
+## Python Ignores
+
+# Python
+/**/__pycache__/
+.venv
+venv
+
+## Mise Ignores
+
+# mise.local.toml is machine-specific (written by `mise run setup`); mise.lock is
+# committed on purpose, because [settings] lockfile = true pins tool versions.
+/mise.local.toml
+
+## IDE's
+
+# IDE
+/.idea/
+/.vscode/
+*.iml
+
+## Development Tools
+
+# Agent session state
+/.remember/
+
+# Linter caches
+/.rumdl_cache/
+
+## Operational Systems
+
+# macOS
+.DS_Store
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+## Nektos/ACT
+# Nektos/ACT Files Igore Pattern
+
+# Nektos/act scratch state. `mise run act` writes a live `gh auth token` into
+# .act/.secrets, so nothing in here may be committed -- only the README, which
+# says exactly that.
+.act/*
+!.act/README.md
+
+## Others
+# Misc
+
+# Scorecard
+/**/scorecard.json

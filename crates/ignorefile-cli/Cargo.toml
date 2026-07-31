@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[package]
+authors.workspace = true
+categories.workspace = true
+description = "Command-line interface for ignorefile"
+documentation.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+name = "ignorefile-cli"
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+# chrono IS used, in build.rs, to stamp BUILD_TIMESTAMP. cargo-machete does not
+# scan build scripts, so it reports this as unused; without the entry
+# `mise run machete` fails on a dependency that cannot be removed.
+[package.metadata.cargo-machete]
+ignored = ["chrono"]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+ignorefile = { path = "../ignorefile", version = "0.1.0" }
+
+[build-dependencies]
+chrono = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# The package is `-cli` so it can be published alongside the core crate of the
+# same base name, but the shipped executable is plain `ignorefile` --
+# which is also the path `mise run build:setup` installs from.
+[[bin]]
+name = "ignorefile"
+path = "src/main.rs"
+
+# `ign` is the short alias. Cargo has no first-class alias, so this is a second
+# binary target over the same entry point: `cargo install` then ships both names
+# and either one works. The cost is one extra link step per build.
+[[bin]]
+name = "ign"
+path = "src/main.rs"
+
+[lints]
+workspace = true

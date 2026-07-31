@@ -1,0 +1,157 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# REUSE-IgnoreStart
+header = """
+  SPDX-FileCopyrightText: ignorefile contributors
+
+  SPDX-License-Identifier: MIT OR Apache-2.0"""
+# REUSE-IgnoreEnd
+name = "Ignored"
+version = 1
+
+[[gitignore.section]]
+name = "Git"
+
+[[gitignore.section.rule]]
+ignore = ["/worktree/", "/.worktree/", "/worktrees/", "/.worktrees/"]
+note = """
+Git worktrees
+One worktree per feature branch, per AGENTS.md."""
+
+[[gitignore.section]]
+name = "AI"
+
+[[gitignore.section.rule]]
+add = ["AGENTS.md"]
+note = "Agents"
+
+[[gitignore.section.rule]]
+ignore = ["/**/.claude/", "/**/claude.local.json"]
+note = "Claude Code"
+
+[[gitignore.section.rule]]
+ignore = ["/**/opencode.json"]
+note = "OpenCode"
+
+[[gitignore.section]]
+name = "Rust and Cargo"
+
+[[gitignore.section.rule]]
+ignore = ["/**/target"]
+note = "Project/Workspaces Directories Ignores"
+
+[[gitignore.section]]
+name = "Project/Workspaces Test Files Ignores"
+
+[[gitignore.section.rule]]
+ignore = [
+  "/**/*.profraw",
+  "/**/cobertura.xml",
+  "/**/lcov.info",
+  "/**/results.sarif",
+  "/**/tarpaulin-report.*",
+]
+note = """
+Coverage artifacts
+Written by `mise run coverage`, `llvm-cov`, `tarpaulin`, `codecov`."""
+
+[[gitignore.section]]
+name = "Rust Benchmark and Performance Files"
+
+[[gitignore.section.rule]]
+ignore = ["/flamegraph.svg", "/perf.data", "/perf.data.old"]
+note = """
+Profiling artifacts
+Written by `mise run flame`, `bench`, `pgo`."""
+
+[[gitignore.section]]
+name = "Rust Fuzz Files"
+
+[[gitignore.section.rule]]
+ignore = [
+  "/fuzz/artifacts/",
+  "/fuzz/corpus/",
+  "/mutants.out/",
+  "/mutants.out.old/",
+]
+note = "Fuzzing and mutation-testing artifacts"
+
+[[gitignore.section]]
+name = "Rust Supply Chains"
+
+[[gitignore.section.rule]]
+ignore = ["/supply-chain/.cargo-vet/"]
+note = """
+Supply-chain scratch
+`mise run vet` creates this; the audited facts live in supply-chain/*.toml."""
+
+[[gitignore.section.rule]]
+ignore = ["/comply"]
+note = "Cargo Binaries and artifacts"
+
+[[gitignore.section]]
+name = "Python Ignores"
+
+[[gitignore.section.rule]]
+ignore = ["/**/__pycache__/", ".venv", "venv"]
+note = "Python"
+
+[[gitignore.section]]
+name = "Mise Ignores"
+
+[[gitignore.section.rule]]
+ignore = ["/mise.local.toml"]
+note = """
+mise.local.toml is machine-specific (written by `mise run setup`); mise.lock is
+committed on purpose, because [settings] lockfile = true pins tool versions."""
+
+[[gitignore.section]]
+name = "IDE's"
+
+[[gitignore.section.rule]]
+ignore = ["/.idea/", "/.vscode/", "*.iml"]
+note = "IDE"
+
+[[gitignore.section]]
+name = "Development Tools"
+
+[[gitignore.section.rule]]
+ignore = ["/.remember/"]
+note = "Agent session state"
+
+[[gitignore.section.rule]]
+ignore = ["/.rumdl_cache/"]
+note = "Linter caches"
+
+[[gitignore.section]]
+name = "Operational Systems"
+
+[[gitignore.section.rule]]
+ignore = [".DS_Store"]
+note = "macOS"
+
+[[gitignore.section.rule]]
+ignore = ["*~", ".fuse_hidden*", ".directory", ".Trash-*", ".nfs*"]
+note = "Linux"
+
+[[gitignore.section]]
+name = "Nektos/ACT"
+note = "Nektos/ACT Files Igore Pattern"
+
+[[gitignore.section.rule]]
+add = [".act/README.md"]
+ignore = [".act/*"]
+note = """
+Nektos/act scratch state. `mise run act` writes a live `gh auth token` into
+.act/.secrets, so nothing in here may be committed -- only the README, which
+says exactly that."""
+
+[[gitignore.section]]
+name = "Others"
+note = "Misc"
+
+[[gitignore.section.rule]]
+ignore = ["/**/scorecard.json"]
+note = "Scorecard"

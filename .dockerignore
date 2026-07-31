@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# The builder stage does `COPY . .`, so without this the whole of `target/` --
+# gigabytes of host-platform artifacts that Linux cannot use and would rebuild
+# anyway -- is uploaded into the build context on every build.
+#
+# `mise run docker:ignore-verify` is the gate for this file: it builds an
+# ephemeral image, lists the context, and fails if anything below leaks in or if
+# a file the build genuinely needs was excluded.
+
+# Build output. The single largest win.
+target/
+target-linux/
+
+# VCS and CI. Nothing in the image build reads these.
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Docs and tooling that never reach a binary.
+docs/
+scripts/
+worktrees/
+supply-chain/
+.rumdl_cache/
+.remember/
+.claude/
+.act/
+
+# Editor and OS noise.
+.idea/
+.vscode/
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Coverage and profiling artifacts, all regenerated.
+cobertura.xml
+lcov.info
+results.sarif
+tarpaulin-report.html
+tarpaulin-report.json
+flamegraph.svg
+perf.data
+perf.data.old
+
+# Repository tooling config. None of it is read during an image build: the
+# builder runs `cargo build`, not clippy, rustfmt, hk, comply or mise.
+mise.toml
+mise.local.toml
+hk.pkl
+deny.toml
+REUSE.toml
+rustfmt.toml
+.clippy.toml
+tomlfmt.toml
+taplo.toml
+.env
+
+# All markdown, including each crate's README. `readme = "README.md"` is package
+# metadata read by `cargo package`/`publish`, never by `cargo build`, so none of
+# it belongs in an image build context.
+**/*.md
+DCO.txt
+
+# The Dockerfiles themselves are read by the builder, not copied into a stage.
+Dockerfile
+Dockerfile.Test
+.dockerignore

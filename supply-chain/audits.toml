@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# cargo-vet audits file
+
+[audits]
+
+[[trusted.RazrFalcon]]
+criteria = "safe-to-deploy"
+end = "2027-07-12"
+start = "2018-06-01"
+user-id = 725782
+
+[[trusted.cuviper]]
+criteria = "safe-to-deploy"
+end = "2027-07-12"
+start = "2015-06-01"
+user-id = 7222
+
+[[trusted.dtolnay]]
+criteria = "safe-to-deploy"
+end = "2027-07-12"
+start = "2019-03-11"
+user-id = 3618
+
+[[trusted.joshlf]]
+criteria = "safe-to-deploy"
+end = "2027-07-12"
+start = "2015-01-01"
+user-id = 57559
+
+[[trusted.rust-lang-owner]]
+criteria = "safe-to-deploy"
+end = "2027-07-12"
+start = "2014-01-01"
+user-id = 12965
+
+[[trusted.starkat99]]
+criteria = "safe-to-deploy"
+end = "2027-07-12"
+start = "2018-01-01"
+user-id = 107926
+
+[[trusted.taiki-e]]
+criteria = "safe-to-deploy"
+end = "2027-07-12"
+start = "2017-01-01"
+user-id = 206278

@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+msrv = "1.95"

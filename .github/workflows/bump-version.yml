@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Bump Cargo Version
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Type of bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions: read-all
+
+jobs:
+  bump-version:
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This workflow is workflow_dispatch-only, so github.sha is just the
+          # tip of the selected branch. The comment here used to explain a
+          # pull_request merge-commit subtlety that cannot arise.
+          ref: ${{ github.sha }}
+          fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ github.token }}
+
+      # Via setup-rust-env for mold, which .cargo/config.toml requires for any
+      # Linux cargo build, and for cargo-edit as a prebuilt binary -- the old
+      # `cargo install cargo-edit` compiled it from source and would have failed
+      # at the link step for want of mold.
+      - name: Install Rust toolchain
+        uses: ./.github/actions/setup-rust-env
+        with:
+          cargo-tools: cargo-edit
+
+      # Through `env:` rather than inlined. `bump_type` is a `choice` input so
+      # the values are constrained today, but the safe shape costs nothing and
+      # survives someone widening the input later.
+      - name: Bump version in Cargo.toml
+        env:
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
+        run: |
+          echo "Bumping version using cargo set-version..."
+          cargo set-version --bump "$BUMP_TYPE"
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Get the new version for the commit message
+          NEW_VER=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to $NEW_VER [skip ci]"
+          git push

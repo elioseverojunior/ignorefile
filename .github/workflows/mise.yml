@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Mise
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Top-level read-all; jobs that upload results need additional write permissions.
+permissions: read-all
+
+env:
+  CARGO_TERM_COLOR: always
+  # mise.toml's [env] defaults GITHUB_TOKEN to '' when unset, and an empty token
+  # sends cargo-binstall down the unauthenticated, rate-limited path.
+  GITHUB_TOKEN: ${{ github.token }}
+  # Only affects `mise run`, not the `mise install` the setup job exists to do.
+  # Every cargo tool a task needs arrives prebuilt via setup-rust-env, so no task
+  # has a reason to provision anything itself.
+  MISE_TASK_RUN_AUTO_INSTALL: false
+
+jobs:
+  # The only place in CI that runs `mise install` -- every other mise-action call
+  # passes `install: false`. This is what proves [tools] and mise.lock still
+  # resolve; nothing else would catch a broken tool pin.
+  setup:
+    name: Tool manifest installs
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+
+  # There was a `coverage-llvm-cov` job here: a SECOND coverage engine, run so
+  # the two could cross-check each other at 100%. It has been removed along with
+  # the `llvm-cov` and `coverage` mise tasks.
+  #
+  # Two engines meant two exclusion lists -- tarpaulin.toml's `exclude-files` and
+  # an `IGNORE` regex inside the mise task -- that had to be kept byte-identical
+  # by hand. When they drifted, the verdict depended on which engine happened to
+  # run, which is the opposite of what a cross-check is for. Coverage now has one
+  # engine, one exclusion list, and one number, produced by the same
+  # `mise run coverage:tarpaulin` that runs the tests in ci.yml's Tests job.

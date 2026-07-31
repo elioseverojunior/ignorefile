@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 222a792ff7402654727c5204c6708b22b28546203a1fdcc0f7547e812414193a # shrinks to source = ""
+cc 5b4f8de4ecce8cf7a9d3e24e0599e0d1c3a8497308c9ae228d1934fa7b272f27 # shrinks to source = "-\n# \n\n_"
+cc 7ce78e6682ef8e26036eff26f4b46d3581916572882dc9de79022d65d25e2d7b # shrinks to source = "-\n# \n\n# \n\n0"
+cc 993ea3d1b6c39d540fa7ea97f44d9d87546a8de023fa766105188c47795849a0 # shrinks to source = "## \n\n# \n\na"

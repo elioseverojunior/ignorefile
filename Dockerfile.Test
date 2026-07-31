@@ -1,0 +1,142 @@
+# syntax=docker/dockerfile:1
+
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# The coverage gate, on Linux, with the whole toolchain baked into the image.
+#
+# Why this exists: tarpaulin attributes closure and const-fn bodies differently
+# per platform, so a macOS workstation can report 100% on a tree CI measures at
+# 99.63%. `mise run docker:test` is how a non-Linux machine sees the number the
+# gate actually uses.
+#
+# Why a separate file rather than a stage in `Dockerfile`: that file's
+# dependencies -> builder -> runtime chain produces a stripped release binary and
+# is a different job. Sharing it would mean paying for a release build to run
+# tests, and inheriting its cross-compilation setup for no benefit. The base
+# image ARG below is kept identical to `Dockerfile`'s so the two stay on the same
+# Rust.
+#
+# The point of the layering: NOTHING here copies the source tree. The toolchain,
+# nightly and cargo-tarpaulin are installed at BUILD time, so a run is just
+# `cargo tarpaulin` against a bind mount. The image rebuilds only when
+# `rust-toolchain.toml` or this file changes; every run after the first skips the
+# downloading and compiling that the old inline `docker run` repeated each time.
+
+ARG IMAGE_TAG=1-slim@sha256:5c6f46a6e4472ab1ca7ba7d494e6677f2f219ebc02f32025d3986f057635ec9c
+
+FROM docker.io/library/rust:${IMAGE_TAG} AS test
+
+SHELL ["/bin/bash", "-eou", "pipefail", "-c"]
+
+ENV WORK_PATH=/work
+# Kept off the bind-mounted /work/target: the host's artifacts are the wrong
+# platform and would be rebuilt from scratch anyway, and writing them back would
+# clobber the host's. `docker:test` mounts a named volume here so rebuilds stay
+# incremental between runs.
+ENV CARGO_TARGET_DIR=/work/target-linux
+
+# 1. Build and link dependencies. git is a TEST dependency, not a convenience:
+# `crates/ignorefile/tests/differential.rs` runs `git init` and uses
+# `git check-ignore` as its oracle, so without it three tests fail with "could
+# not run `git init -q .`. Git is required for the differential test" -- which is
+# the suite reporting a missing tool, not a real disagreement with git.
+#
+# clang and mold are not optional either: for
+# x86_64-unknown-linux-gnu, `.cargo/config.toml` sets `linker = "clang"` and
+# `rustflags = ["-C", "link-arg=-fuse-ld=mold"]`, so without them every link
+# fails. Setting RUSTFLAGS to work around that is not an option either -- it
+# REPLACES the config file's rustflags rather than merging, which would silently
+# drop the warnings-as-errors gate with it.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
+  set -Eeuxo pipefail
+  apt-get update
+  apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    clang \
+    git \
+    libssl-dev \
+    mold \
+    pkg-config
+EOF
+
+WORKDIR ${WORK_PATH}
+
+# 2. Bake the pinned toolchain. Only the pin file is copied, so this layer stays
+# cached until the pin itself moves. `rustup show` is what materializes the
+# channel AND the `components = ["llvm-tools"]` the file declares -- llvm-tools
+# is what tarpaulin's `--engine llvm` needs, so checking for it here turns a
+# confusing run-time failure into a build-time one.
+COPY rust-toolchain.toml ./
+RUN <<EOF
+  set -Eeuxo pipefail
+  rustup show
+  rustup component list --installed | grep -q '^llvm-tools' \
+    || { echo "llvm-tools missing; tarpaulin --engine llvm needs it" >&2; exit 1; }
+EOF
+
+# 3. Nightly, for doctest instrumentation. `--run-types Doctests` builds them
+# with nightly; left to itself tarpaulin installs one mid-run, and that install
+# races whatever else is touching rustup. Doing it here makes it one serialized
+# call at build time. `minimal` because only rustc and cargo are needed to build
+# a doctest.
+RUN rustup toolchain install nightly --profile minimal --no-self-update
+
+# 4. cargo-tarpaulin. The expensive one -- minutes to compile -- and exactly what
+# the old task reinstalled behind a `command -v` guard that only held as long as
+# its named volume did.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo install cargo-tarpaulin --locked
+
+# 5. The gate itself, with the same flags as `[tasks."coverage:tarpaulin"]` in
+# mise.toml -- the whole point is to measure what the host task measures.
+# tarpaulin.toml arrives with the bind-mounted source and still supplies the
+# engine and the exclusion list, so those keep one source of truth.
+RUN <<'EOF'
+  set -Eeuxo pipefail
+  cat > /usr/local/bin/coverage-gate <<'SCRIPT'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Any argument replaces the default invocation, so the image doubles as a shell
+# for poking at a Linux-only failure: `mise run docker:test -- bash`.
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
+exec cargo tarpaulin --workspace --engine llvm \
+  --run-types Tests --run-types Doctests \
+  --fail-under "${RUST_COVERAGE_THRESHOLD:-100}" \
+  --out Xml Lcov
+SCRIPT
+  chmod +x /usr/local/bin/coverage-gate
+EOF
+
+# 6. Make the image runnable as an ARBITRARY uid, because `docker:test` passes
+# `--user "$(id -u):$(id -g)"`.
+#
+# Running as root looked harmless and was not. `cli.rs`'s
+# `add_reports_an_unwritable_config` chmods a config to 0o444 and asserts the
+# write is refused -- but root bypasses permission bits, so the write succeeded
+# and the test failed here while passing on the host and on GitHub's non-root
+# runners. A container that disagrees with both is worse than useless for a task
+# whose entire job is to report the number CI will report.
+#
+# Root also owns whatever it writes into the bind mount, so `cobertura.xml` and
+# `lcov.info` would come back into the working tree as root-owned files.
+#
+# cargo and rustup live in these shared paths in the official image; a foreign
+# uid needs to write to both. `/work/target-linux` is created here so the named
+# volume Docker initializes from it inherits this mode rather than defaulting to
+# root-only.
+RUN <<EOF
+  set -Eeuxo pipefail
+  mkdir -p "${CARGO_TARGET_DIR}"
+  chmod -R a+rwX "${CARGO_HOME}" "${RUSTUP_HOME}" "${CARGO_TARGET_DIR}"
+EOF
+
+ENTRYPOINT ["/usr/local/bin/coverage-gate"]

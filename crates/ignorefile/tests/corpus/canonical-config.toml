@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name = "ignore-as-config"
+version = 1
+
+[[gitignore.section]]
+name = "Logs"
+note = "Ignore Logs Pattern"
+
+[[gitignore.section.rule]]
+ignore = ["*.log"]
+
+[[gitignore.section.rule]]
+add = ["important.log"]
+note = "keep the one we actually read"
+
+[[gitignore.section]]
+name = "Mise"
+note = "Mise Ignore Pattern"
+
+[[gitignore.section.rule]]
+ignore = ["/mise.local.toml"]
+note = "mise.local.toml is machine-specific; mise.lock is committed on purpose."
+
+[[gitignore.section.rule]]
+add = ["/mise.lock"]
+note = "Always Add Mise configs"

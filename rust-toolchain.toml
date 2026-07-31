@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[toolchain]
+channel = "1.97"
+# `complete` is unusable on a release channel: it implies miri and
+# rustc-codegen-cranelift, which rustup publishes for nightly only, so the
+# install fails with "some components are unavailable for download". miri and
+# cargo-fuzz get their own nightly toolchain via `mise run install-nightly`.
+profile = "default"
+# Coverage (`mise run coverage:tarpaulin`, which passes --engine llvm) and
+# cargo-pgo need
+# llvm-tools, which `default` omits.
+components = ["llvm-tools"]

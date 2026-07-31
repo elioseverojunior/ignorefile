@@ -1,0 +1,252 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Publish to crates.io
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g., 0.1.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform a dry run without publishing"
+        required: false
+        type: boolean
+        default: false
+
+permissions: read-all
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    outputs:
+      should_publish: ${{ steps.check.outputs.should_publish }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ github.token }}
+
+      # Both values reach the shell through `env:` rather than being
+      # interpolated into the script. A workflow_dispatch input is free text, so
+      # inlining it would let anyone who can dispatch the workflow run arbitrary
+      # shell; the semver check then rejects anything that is not a version.
+      - name: Extract version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            VERSION="${TAG_NAME#v}"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*$'; then
+            echo "::error::Not a semver version: $VERSION"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version to publish: ${VERSION}"
+
+      - name: Check if should publish
+        id: check
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "Dry run mode - will not publish"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Will proceed with publishing"
+          fi
+
+  # NOT gated on `should_publish` at the job level. It used to be, which made the
+  # `dry_run` input do nothing at all: a dry run set should_publish=false, the
+  # whole job was skipped, and the `Verify packages` and `Dry run verification`
+  # steps below -- the entire point of rehearsing a release -- never ran. The
+  # gate belongs on the publishing step alone, so a dry run still builds, tests
+  # and packages every crate and only stops short of the irreversible part.
+  publish-crates:
+    name: Publish crates to crates.io
+    needs: [validate]
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    environment: crates-io
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ github.token }}
+
+      - name: GitHub Actions Bot Setup
+        uses: ./.github/actions/bot-setup
+
+      # `cargo package`/`cargo publish` build each crate to verify it, so they
+      # need mold from setup-rust-env; the bare toolchain action left it out and
+      # the verify step would fail at link time.
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+        with:
+          cargo-tools: ""
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+          install: false
+
+      # A crates.io publish cannot be undone -- a bad version can only be yanked,
+      # and the version number is burned forever. A release can be cut from any
+      # tag, so there is no guarantee ci.yml ever ran green on this commit. Run
+      # the same gate here before spending the version number.
+      - name: Tests
+        env:
+          RUST_COVERAGE_THRESHOLD: ${{ vars.RUST_COVERAGE_THRESHOLD || '100' }}
+        run: mise run coverage:tarpaulin
+
+      - name: Crates.io Authentication
+        id: crates-auth
+        if: needs.validate.outputs.should_publish == 'true'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      # `--locked` so the verification build resolves exactly the Cargo.lock that
+      # was tested above, rather than picking up newer semver-compatible
+      # dependencies between this step and the publish below.
+      - name: Verify packages
+        run: cargo package --workspace --locked --verbose
+
+      # `--workspace` resolves the publish order from the dependency graph and
+      # polls the index between crates, so neither has to be maintained here.
+      - name: Publish to crates.io
+        if: needs.validate.outputs.should_publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+        run: cargo publish --workspace --locked --token "${CARGO_REGISTRY_TOKEN}" --verbose
+
+      - name: Dry run verification
+        if: needs.validate.outputs.should_publish != 'true'
+        run: echo "Dry run - crates built, tested and packaged, but not published"
+
+  publish-docs:
+    name: Publish Documentation
+    needs: [validate, publish-crates]
+    if: |
+      success() &&
+      needs.publish-crates.result == 'success' &&
+      needs.validate.outputs.should_publish == 'true'
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ github.token }}
+
+      - name: GitHub Actions Bot Setup
+        uses: ./.github/actions/bot-setup
+
+      # `cargo doc` compiles the crates, so mold is required here too.
+      - uses: ./.github/actions/setup-rust-env
+        with:
+          cargo-tools: ""
+
+      - name: Build documentation
+        run: |
+          cargo doc --all-features --no-deps
+          echo '<meta http-equiv="refresh" content="0; url=ignorefile/index.html">' > target/doc/index.html
+
+      - name: Upload artifact for GitHub Pages
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: target/doc
+
+      - name: Deploy to GitHub Pages
+        if: github.event.inputs.dry_run != 'true'
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+        with:
+          token: ${{ github.token }}
+
+      - name: Documentation URLs
+        run: |
+          echo "Documentation URLs:"
+          echo "  - docs.rs: https://docs.rs/ignorefile/${{ needs.validate.outputs.version }}"
+          echo "  - Latest: https://docs.rs/ignorefile/latest"
+          echo "  - GitHub Pages: https://${{ github.repository_owner }}.github.io/ignorefile/"
+
+  summary:
+    name: Publication Summary
+    needs: [validate, publish-crates, publish-docs]
+    if: always()
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    steps:
+      # Job results and the validated version reach the script through `env:`
+      # rather than being interpolated into it, matching how `validate` handles
+      # its inputs.
+      - name: Summary
+        env:
+          SHOULD_PUBLISH: ${{ needs.validate.outputs.should_publish }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          CRATES_RESULT: ${{ needs.publish-crates.result }}
+          DOCS_RESULT: ${{ needs.publish-docs.result }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "# Publication Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Order matters: publish-crates now RUNS on a dry run (it builds, tests
+          # and packages), so a green result no longer implies anything reached
+          # crates.io. should_publish is the only thing that distinguishes them.
+          if [ "$SHOULD_PUBLISH" != "true" ]; then
+            if [ "$CRATES_RESULT" = "success" ]; then
+              echo "**crates.io:** Dry run - built, tested and packaged, not published" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "**crates.io:** Dry run FAILED before packaging completed" >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "$CRATES_RESULT" = "success" ]; then
+            echo "**crates.io:** Published" >> $GITHUB_STEP_SUMMARY
+            echo "  - View: https://crates.io/crates/ignorefile/$VERSION" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**crates.io:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$DOCS_RESULT" = "success" ]; then
+            echo "**Documentation:** Published" >> $GITHUB_STEP_SUMMARY
+            echo "  - docs.rs: https://docs.rs/ignorefile/latest" >> $GITHUB_STEP_SUMMARY
+            echo "  - GitHub Pages: https://${OWNER}.github.io/ignorefile/" >> $GITHUB_STEP_SUMMARY
+          elif [ "$DOCS_RESULT" = "skipped" ]; then
+            echo "**Documentation:** Skipped (dry run)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Documentation:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi

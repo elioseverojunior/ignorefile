@@ -1,0 +1,46 @@
+SPDX-PackageDownloadLocation = "https://github.com/elioseverojunior/ignorefile"
+SPDX-PackageName = "ignorefile"
+SPDX-PackageSupplier = "IGNOREFILE contributors"
+version = 1
+
+[[annotations]]
+SPDX-FileCopyrightText = "ignorefile contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+path = ["**"]
+precedence = "override"
+
+[tool.comply]
+# Custom comply settings
+# Markdown is licensed by the `**` aggregate above, so it needs no inline
+# header; these entries are that policy, not a workaround. `comply annotate`
+# now inserts below YAML frontmatter rather than above it, so removing an entry
+# here is safe -- it would gain a header, not lose its frontmatter.
+ignore = [
+  "**/target/**",
+  "**/*.lock",
+  ".actrc",
+  ".claude/**/*.md",
+  # Symlinks into LICENSES/, so `cargo package` ships the license texts inside
+  # each published crate. They MUST stay ignored: annotating a symlink writes
+  # through it, which would corrupt the canonical texts every other file cites.
+  "crates/*/LICENSE-*",
+  "instructions.md",
+  "Dockerfile.Test",
+  # Byte-exact test data, NOT source. `crates/ignorefile/tests/convert.rs`
+  # asserts render(parse(x)) == x for each of these, and the schema test compares
+  # a rendered config against canonical.gitignore verbatim. An SPDX header here
+  # is parsed as content, not metadata: it displaced `### ignore-as-config` as
+  # the first meaningful line and turned `config.name` into None, failing four
+  # tests. The `**` aggregate above already licenses them, so a header buys
+  # nothing. Never annotate this directory.
+  "crates/ignorefile/tests/corpus/*.gitignore",
+]
+
+[[tool.comply.comment-styles]]
+filenames = [".gitmessage"]
+open = "#"
+
+[[tool.comply.comment-styles]]
+extensions = ["pkl"]
+filenames = ["hk.pkl"]
+open = "//"

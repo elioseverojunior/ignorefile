@@ -1,0 +1,125 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: "Setup Rust Environment"
+description: "Setup Rust toolchain, cache, and cargo tools in one action"
+inputs:
+  toolchain:
+    description: >
+      Rust toolchain channel. Empty by default so the action reads
+      rust-toolchain.toml, keeping that file the single source of truth. Naming
+      a channel here overrides it for the whole job -- the action exports
+      RUSTUP_TOOLCHAIN, which outranks every rust-toolchain.toml in the tree --
+      so set it only for jobs that genuinely need another channel (nightly).
+    required: false
+    default: ""
+  components:
+    description: "Additional rustup components (e.g., clippy, rustfmt, miri)"
+    required: false
+    default: ""
+  targets:
+    description: "Additional rustup targets (e.g., wasm32-unknown-unknown)"
+    required: false
+    default: ""
+  cargo-tools:
+    description: "Space-separated list of cargo tools to install"
+    required: false
+    # cargo-binstall is here for mise's benefit, not ours: mise's `cargo:`
+    # backend shells out to ~/.cargo/bin/cargo-binstall and, finding none on a
+    # runner, falls back to compiling each pinned tool from source -- which is
+    # what made `mise install` take ~9 minutes.
+    default: >
+      cargo-audit cargo-binstall cargo-crap cargo-criterion cargo-deny
+      cargo-edit cargo-fuzz cargo-machete cargo-mutants
+      cargo-nextest cargo-pgo cargo-semver-checks cargo-sort cargo-tarpaulin
+      cargo-wizard committed flamegraph rumdl taplo-cli
+  cache-key-suffix:
+    description: "Additional suffix for cache key specificity"
+    required: false
+    default: ""
+  cache-target:
+    description: "Whether to cache target directory"
+    required: false
+    default: "true"
+  rust-cache-shared-key:
+    description: "Shared key for rust-cache (e.g., 'perf' for benchmarks)"
+    required: false
+    default: ""
+  rust-cache-save-if:
+    description: "Condition for rust-cache to save (e.g., github.ref == 'refs/heads/main')"
+    required: false
+    default: ""
+
+outputs:
+  cache-hit:
+    description: "Whether the Rust cache was restored (exact match)"
+    value: ${{ steps.rust-cache.outputs.cache-hit }}
+  cache-key:
+    description: "The computed cache key passed to Swatinem/rust-cache"
+    value: ${{ steps.cache-names.outputs.cache-key }}
+  cache-shared-key:
+    description: "The computed shared key passed to Swatinem/rust-cache"
+    value: ${{ steps.cache-names.outputs.cache-shared-key }}
+  rust-version:
+    description: "The installed Rust toolchain version (e.g. 'rustc 1.88.0 (a1b2c3d4e 2025-07-14)')"
+    value: ${{ steps.rust-version.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    # .cargo/config.toml pins `-fuse-ld=mold` for x86_64-unknown-linux-gnu with
+    # no fallback, so mold is a hard requirement for ANY cargo invocation there,
+    # not the optimisation its comment implies. It belongs here rather than in
+    # one workflow: it used to be installed only by ci.yml's `quick` job, so
+    # every other compiling job failed with
+    # `clang: error: invalid linker name in argument '-fuse-ld=mold'`.
+    - name: Install mold (required by .cargo/config.toml on Linux)
+      if: runner.os == 'Linux' && runner.arch == 'X64'
+      shell: bash
+      run: |
+        if ! command -v mold >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y mold
+        fi
+
+    - name: Setup Rust toolchain
+      id: rust-toolchain
+      uses: elioseverojunior/rust-toolchain@91138e0dc700b6225bb92937a5521ad9f6e86bb4 # v0.0.1-1
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - name: Get Rust version
+      id: rust-version
+      shell: bash
+      run: echo "version=$(rustc --version)" >> "$GITHUB_OUTPUT"
+
+    - name: Compute cache key
+      id: cache-names
+      shell: bash
+      run: |
+        cache_key="cargo-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-key-suffix }}-${{ hashFiles('**/Cargo.lock') }}"
+        echo "cache-key=${cache_key}" >> "$GITHUB_OUTPUT"
+        shared_key="${{ inputs.rust-cache-shared-key || steps.rust-toolchain.outputs.name }}"
+        echo "cache-shared-key=${shared_key}" >> "$GITHUB_OUTPUT"
+
+    - name: Setup Rust cache
+      id: rust-cache
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      with:
+        cache-on-failure: true
+        save-if: ${{ inputs.cache-target == 'true' && (inputs.rust-cache-save-if == '' || inputs.rust-cache-save-if) }}
+        # The resolved channel, not the input: with `toolchain` empty the input
+        # would yield a blank shared-key, and every job would fall back to
+        # keying on its own job_id instead of sharing one cache.
+        shared-key: ${{ inputs.rust-cache-shared-key || steps.rust-toolchain.outputs.name }}
+        key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-key-suffix }}-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install cargo tools
+      if: ${{ inputs.cargo-tools != '' }}
+      uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
+      with:
+        tool: |
+          ${{ inputs.cargo-tools }}

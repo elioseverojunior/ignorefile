@@ -1,0 +1,121 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Nightly Fuzz & Bench
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions: read-all
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Via setup-rust-env, not the toolchain action directly: that path also
+      # installs mold, which .cargo/config.toml requires for every Linux cargo
+      # invocation, and brings the rust-cache with it.
+      #
+      # cargo-fuzz needs nightly for the sanitizer -Z flags; the steps below run
+      # `cargo +nightly`, so without the channel the project one gets installed
+      # and every fuzz invocation fails on a missing toolchain.
+      - uses: ./.github/actions/setup-rust-env
+        with:
+          toolchain: nightly
+          cargo-tools: cargo-fuzz
+          rust-cache-shared-key: nightly
+
+      - name: Check for fuzz targets
+        id: has-fuzz
+        run: |
+          if [ -d fuzz ] || ls crates/*-fuzz/Cargo.toml 2>/dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: List targets
+        if: steps.has-fuzz.outputs.found == 'true'
+        id: list-targets
+        run: |
+          targets=$(cargo +nightly fuzz list 2>/dev/null | tr '\n' ' ')
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+      # The target list arrives through `env:` and is split with `read -ra`
+      # rather than being interpolated into the loop header. `cargo fuzz list`
+      # derives those names from the repository, so on a workflow that any
+      # branch can carry, a fuzz target named to look like shell would have run
+      # as shell.
+      - name: Run fuzzer (5 min each)
+        if: steps.has-fuzz.outputs.found == 'true'
+        env:
+          FUZZ_TARGETS: ${{ steps.list-targets.outputs.targets }}
+        run: |
+          read -ra targets <<< "$FUZZ_TARGETS"
+          for target in "${targets[@]}"; do
+            echo "Fuzzing $target for 300s..."
+            cargo +nightly fuzz run "$target" -- -max_total_time=300
+          done
+
+      - name: Upload crash artifacts
+        if: failure() && steps.has-fuzz.outputs.found == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crash
+          path: fuzz/artifacts/
+
+  # Delegates to performance.yml rather than repeating its benches-exist guard,
+  # `cargo bench` call and criterion upload. That workflow additionally compares
+  # against the gh-pages baseline, which the local copy never did. `auto-push`
+  # there keys off a `push` event, so a scheduled run compares without moving
+  # the baseline.
+  bench:
+    name: Benchmarks
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/performance.yml
+
+  miri:
+    name: Miri (UB / strict-provenance)
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # rustup publishes miri for nightly only, so naming the channel is what
+      # makes the component resolvable at all -- without it the project channel
+      # is installed and the miri component fails to download. Routed through
+      # setup-rust-env for mold and the shared cache; miri needs no cargo tools.
+      - uses: ./.github/actions/setup-rust-env
+        with:
+          toolchain: nightly
+          components: miri
+          cargo-tools: ""
+          rust-cache-shared-key: nightly
+
+      # `--lib` on the core crate only, not `--workspace`. Miri has no support
+      # for spawning a process, and tests/differential.rs runs `git check-ignore`
+      # as its oracle, so a workspace-wide run aborts on an unsupported
+      # operation rather than reporting anything about undefined behaviour. The
+      # unit tests in the library are the part where UB could hide anyway.
+      - name: cargo miri test
+        run: cargo +nightly miri test -p ignorefile --lib
+        env:
+          MIRIFLAGS: "-Zmiri-strict-provenance"

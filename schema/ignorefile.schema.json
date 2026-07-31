@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/elioseverojunior/ignorefile/main/schema/ignorefile.schema.json",
+  "title": "ignorefile configuration",
+  "description": "Ignore rules kept as reviewable configuration. Sections and rules are ordered arrays because their order is semantic; comments are fields because JSON has no comment syntax.",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Schema version. Only 1 is understood.",
+      "type": "integer",
+      "const": 1
+    },
+    "header": {
+      "description": "Verbatim comment block above everything else, before the ### banner. Where a licence header lives. Each line renders as its own # line.",
+      "type": "string"
+    },
+    "name": {
+      "description": "Rendered as a ### banner at the top of the output file.",
+      "type": "string"
+    },
+    "gitignore": {
+      "description": "The .gitignore this configuration describes.",
+      "$ref": "#/$defs/target"
+    }
+  },
+  "$defs": {
+    "target": {
+      "description": "One ignore file's worth of sections. Reused verbatim when other ignore files are added.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "description": "Sections, in output order.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/section" }
+        }
+      }
+    },
+    "section": {
+      "description": "A commented group of rules, rendered under a ## header.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Header text, without its leading #.",
+          "type": "string"
+        },
+        "level": {
+          "description": "Comment depth of the header. 1 renders #, 2 renders ##.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 2
+        },
+        "note": {
+          "description": "Explanation under the header. Each line renders as its own # line.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "Rules, in order.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        }
+      }
+    },
+    "rule": {
+      "description": "A group of patterns, optionally preceded by its own comment. Both pattern lists are optional here; that a rule needs at least one of them is enforced by Config::validate, which can say so in a useful message.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "note": {
+          "description": "Explanation above the patterns. Each line renders as its own # line.",
+          "type": "string"
+        },
+        "ignore": {
+          "description": "Patterns to ignore, verbatim, including any leading slash.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "add": {
+          "description": "Patterns to re-include. Stored WITHOUT the leading ! that .gitignore writes; the renderer adds it.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": { "pattern": "^!" }
+          }
+        }
+      }
+    }
+  }
+}

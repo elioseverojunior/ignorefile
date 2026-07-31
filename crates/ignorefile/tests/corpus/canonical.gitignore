@@ -1,0 +1,17 @@
+### ignore-as-config
+
+## Logs
+# Ignore Logs Pattern
+*.log
+
+# keep the one we actually read
+!important.log
+
+## Mise
+# Mise Ignore Pattern
+
+# mise.local.toml is machine-specific; mise.lock is committed on purpose.
+/mise.local.toml
+
+# Always Add Mise configs
+!/mise.lock

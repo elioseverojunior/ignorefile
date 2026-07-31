@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[package]
+authors.workspace = true
+categories.workspace = true
+description = "Language Server Protocol implementation for ignorefile"
+documentation.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+name = "ignorefile-lsp"
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+ignorefile = { path = "../ignorefile", version = "0.1.0" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[[bin]]
+name = "ignorefile-lsp"
+path = "src/main.rs"
+
+[lints]
+workspace = true

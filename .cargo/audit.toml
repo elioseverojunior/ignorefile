@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[advisories]
+ignore = []
+informational_warnings = []
+severity_threshold = "medium"
+
+[database]
+fetch = true
+stale = false
+
+[output]
+format = "terminal"
+quiet = false
+show_tree = true
+
+[yanked]
+enabled = true
+update_index = true

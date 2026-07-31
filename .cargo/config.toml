@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[build]
+# Workspace warning gate. `-D warnings` turns every rustc lint into a hard error
+# when compiling a WORKSPACE crate (build / test / clippy / check, locally and in
+# CI). Cargo passes `--cap-lints allow` to registry & git dependencies, so this
+# never fails on third-party crates — only on our own code.
+#
+# This replaces the `RUST_FLAGS: "-D warnings"` that used to sit in ci.yml:
+# `RUST_FLAGS` is not a real variable (the env var is `RUSTFLAGS`), so that gate
+# was a silent no-op. Centralizing it here fixes the typo and de-duplicates it.
+#
+# To make this CI-only instead (e.g. if warnings-as-errors is too aggressive for
+# local/IDE iteration), delete this line and set `RUSTFLAGS: -D warnings` in the
+# CI workflow env instead.
+# `-C target-cpu=native` used to lead this list and has been removed. Cargo uses
+# exactly ONE source of extra flags -- `RUSTFLAGS`, else a matching
+# `[target.*] rustflags`, else `build.rustflags` -- they do not merge. Every
+# triple this project builds on has a `[target.*]` section below for its linker,
+# so none of them ever read this line. The only target without a section is
+# wasm32-unknown-unknown, so `target-cpu=native` reached the WebAssembly build
+# and nothing else, where a host x86 CPU model is meaningless: it emitted ~50k
+# lines of "'+avx512dq' is not a recognized feature for this target (ignoring
+# feature)". To actually get native codegen, add it to the `[target.*]` sections
+# below, which is where the flags for those triples really come from.
+rustflags = ["-D", "warnings"]
+
+# Documentation lint gate: promotes rustdoc lints (broken_intra_doc_links,
+# redundant_explicit_links, bare_urls, invalid_html_tags, …) to hard errors so
+# broken docs fail the build instead of printing an ignorable warning.
+rustdocflags = ["-D", "warnings"]
+
+[env]
+# Ensures the cc crate uses the correct cross-compiler for the target
+CC_aarch64_unknown_linux_gnu = "aarch64-linux-gnu-gcc"
+# Ensures host build-dependencies use your local host compiler
+HOST_CC = "gcc"
+# NOTE: NEXTEST_NO_TESTS deliberately does NOT live here. This [env] block only
+# reaches processes cargo spawns as part of a build (build scripts, rustc,
+# `cargo run`); `cargo nextest` is an external subcommand, so cargo never applies
+# it and the setting silently has no effect. It lives in mise.toml's [env].
+
+[profile.dev]
+debug = true
+incremental = true
+opt-level = 1
+
+[profile.release]
+codegen-units = 1
+debug = false
+lto = "fat"
+# "z" optimizes for binary size; use "3" for max speed instead.
+opt-level = "z"
+panic = "abort" # Optional: removes unwinding logic, saving even more space
+strip = true    # Changed to true (removes all unnecessary debug symbols)
+
+# Target-specific linker improvements.
+# macOS ARM (Apple Silicon) — use the system ld64
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
+
+# macOS x86_64
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
+
+# Linux x86_64 — use mold if available for faster linking
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"

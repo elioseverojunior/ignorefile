@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+### ignore-as-config
+
+## Cargo
+/target
+
+## Placeholder
+# TODO: decide what belongs here

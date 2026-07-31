@@ -1,0 +1,322 @@
+# SPDX-FileCopyrightText: ignorefile contributors
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions: read-all
+
+env:
+  CARGO_TERM_COLOR: always
+  # `mise run` installs [tools] before every task, which overrides mise-action's
+  # `install: false`: the Supply Chain job spent 8m57s having `mise run comply`
+  # build all 26 pinned tools from source, because mise looks for cargo-binstall
+  # at ~/.cargo/bin and CI has none, so its cargo backend compiles instead. The
+  # gates below use mise for its config flags, not for provisioning --
+  # setup-rust-env has already put every tool they need on PATH as a prebuilt
+  # binary.
+  MISE_TASK_RUN_AUTO_INSTALL: false
+  # mise.toml's [env] does `GITHUB_TOKEN = {{env.GITHUB_TOKEN | default(value='')}}`,
+  # so with nothing set it exports an EMPTY token -- worse than unset, since any
+  # tool that reads it then makes unauthenticated, rate-limited API calls.
+  GITHUB_TOKEN: ${{ github.token }}
+
+jobs:
+  # Formatting and lint only. The test steps that used to live here moved to the
+  # Tests job below: running `mise run test` (nextest) here and `tarpaulin` there
+  # meant the suite was built and executed twice per run, by two different
+  # harnesses, and only one of them ran the doctests.
+  quick:
+    name: Format & Lint
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+          install: false
+
+      # One step per gate so a failure is still legible at a glance, but the
+      # flags live only in mise.toml -- these used to be inline cargo commands
+      # that mise.toml separately re-declared.
+      - name: Format check
+        run: mise run cargo:fmt:check
+
+      - name: Clippy
+        run: mise run cargo:clippy
+
+  # Nothing else in the gate compiles this crate for the target it exists to
+  # serve. `cargo test --workspace` builds ignorefile-wasm for the host, where
+  # wasm-bindgen's macros expand to nearly nothing, so a signature that no wasm
+  # ABI can express would pass every other job here.
+  wasm:
+    name: WebAssembly Build
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+          install: false
+
+      - name: Build for wasm32-unknown-unknown
+        run: mise run wasm
+
+  formatting:
+    name: Sort & Format
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+        with:
+          cache-target: "false"
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+          install: false
+
+      # Via mise so `--grouped` is enforced: the inline command here omitted it,
+      # so CI accepted ungrouped dependencies that `mise run cargo:sort` and the
+      # pre-commit hook would immediately rewrite.
+      - name: cargo-sort check
+        run: mise run cargo:sort:check
+
+      - name: taplo check
+        run: mise run taplo:check
+
+  markdown:
+    name: Markdown Lint
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust-env
+
+      - name: Markdown lint
+        run: rumdl check
+
+  yaml:
+    name: YAML & Action Lint
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+        with:
+          cargo-tools: yamllint-rs
+          cache-target: "false"
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+          install: false
+
+      # Via mise so the path list is enforced. This was an inline
+      # `yamllint-rs .`, and yamllint-rs will not descend into a dot-directory:
+      # it linted GitVersion.yml alone and skipped all 16 files under .github,
+      # so this gate had never once checked a workflow.
+      - name: yamllint-rs
+        run: mise run yamllint
+
+      # The job has always been called "YAML & Action Lint" but only ever ran
+      # the YAML half. actionlint is what catches an expression typo or a bad
+      # action input before a workflow fails at runtime.
+      #
+      # Installed explicitly because actionlint is a mise [tools] entry rather
+      # than one of setup-rust-env's cargo tools, and the workflow-level
+      # MISE_TASK_RUN_AUTO_INSTALL=false stops `mise run` from provisioning it.
+      # Naming the one tool keeps that opt-out -- and the 9-minute build it
+      # exists to prevent -- intact. It resolves to aqua:rhysd/actionlint, a
+      # prebuilt binary, so this is a download rather than a compile.
+      - name: Install actionlint
+        run: mise install actionlint
+
+      - name: actionlint
+        run: mise run actionlint
+
+  secrets:
+    name: Secrets Scan
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Gitleaks Setup
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: gitleaks
+        run: gitleaks git --platform github .
+
+      # `results.sarif` is what gitleaks-action's `--report-path` actually writes;
+      # `gitleaks-results.sarif` is only the name of the artifact it uploads, so
+      # pointing here at that name always missed the file.
+      - name: Generate Summary Report
+        if: always()
+        uses: ./.github/actions/summary
+        with:
+          file-path: results.sarif
+          title: "Gitleaks Scan Summary"
+          tool-name: "Gitleaks"
+
+  supply-chain:
+    name: Supply Chain
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+        with:
+          cache-target: "false"
+
+      # mise itself only: `install: false` skips `mise install`, which would
+      # build every tool in [tools] from source.
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+          install: false
+
+      - name: cargo audit
+        run: mise run cargo:audit
+
+      - name: cargo deny
+        run: mise run cargo:deny
+
+      # `comply` is a [tools] entry, not one of setup-rust-env's cargo tools, so
+      # nothing else in this job puts it on PATH. With `install: false` above and
+      # MISE_TASK_RUN_AUTO_INSTALL=false at the workflow level, `mise run comply`
+      # would find no binary and the job would die with `comply: command not
+      # found` -- which is exactly how this step failed before it existed.
+      #
+      # Naming the single tool keeps both opt-outs intact: a blanket
+      # `mise install` is what once made this job take 8m57s. comply has no
+      # tagged release, so mise builds it from the pinned revision in mise.toml
+      # (~2.5 min cold); the mise-action cache above makes that a one-off per
+      # cache key rather than a cost on every run.
+      - name: Install comply
+        run: mise install "cargo:https://github.com/elioseverojunior/comply"
+
+      - name: REUSE lint
+        run: mise run comply
+
+      # `comply lint` only checks that a header EXISTS, and `comply format
+      # --check` accepts the 2-line and 3-line shapes alike. This pins the
+      # canonical 2-line form so it cannot drift back once applied.
+      - name: SPDX header form
+        run: mise run comply:format:check
+
+  # The single place the test suite runs. `mise run coverage:tarpaulin` IS the
+  # test command -- tarpaulin's `--run-types Tests --run-types Doctests` executes
+  # the unit, integration AND doc tests under instrumentation in one build, then
+  # gates on the coverage it just measured. So the tests a run executed and the
+  # percentage it gated on always describe the same build; they used to be two
+  # separate jobs on two harnesses that could disagree.
+  #
+  # The identical task backs `mise run pr:ready` and `mise run ci:quick`, so a
+  # local green and a CI green mean the same thing.
+  tests:
+    name: Tests
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # llvm-tools, which tarpaulin's llvm engine needs to instrument doctests,
+      # comes from rust-toolchain.toml's `components`.
+      - uses: ./.github/actions/setup-rust-env
+        id: rust-env
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_key: mise-${{ steps.rust-env.outputs.cache-key }}
+          install: false
+
+      # tarpaulin builds doctests with nightly (`--run-types Doctests`). Left to
+      # itself it installs one mid-run, and that install raced whatever else was
+      # touching rustup:
+      #   component download failed for cargo-x86_64-unknown-linux-gnu:
+      #   could not rename 'downloaded' file ... No such file or directory
+      # Installing it up front is one serialised rustup call, so tarpaulin finds
+      # the toolchain already present and never shells out to rustup at all.
+      # `minimal` because only rustc/cargo are needed to build a doctest.
+      - name: Install nightly for doctest instrumentation
+        run: rustup toolchain install nightly --profile minimal --no-self-update
+
+      # No NEXTEST_NO_TESTS here on purpose. That variable guards the "a green
+      # run may have executed zero tests" trap, and it only binds nextest --
+      # tarpaulin drives `cargo test`, which has no such silent-pass mode. The
+      # gate cannot be fooled by an empty run, so there is nothing to restore.
+      - name: Run tests and coverage
+        env:
+          RUST_COVERAGE_THRESHOLD: ${{ vars.RUST_COVERAGE_THRESHOLD || '100' }}
+        run: mise run coverage:tarpaulin
+
+      # `always()` means this runs even when coverage failed, where lcov.info was
+      # never written -- the bare command then failed too and buried the real
+      # error under "opening LCOV file: No such file or directory".
+      - name: Convert LCOV to SARIF
+        if: always()
+        run: |
+          if [ -s lcov.info ]; then
+            cargo-crap --lcov lcov.info --format sarif > results.sarif
+          else
+            echo "No lcov.info: coverage did not complete. Skipping SARIF conversion."
+          fi
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-report
+          path: cobertura.xml
+
+      - name: Generate Summary Report
+        if: always()
+        uses: ./.github/actions/summary
+        with:
+          file-path: results.sarif
+          title: "Coverage Report"
+          tool-name: "Tarpaulin"
