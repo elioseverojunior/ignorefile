@@ -10,7 +10,7 @@
 # positives. detect-secrets (.secrets.baseline) runs alongside this — the two
 # are complementary scanners, not redundant.
 
-title = "COMPLY gitleaks config"
+title = "ignorefile gitleaks config"
 
 [extend]
 # Pull in gitleaks' maintained ruleset rather than re-deriving ~150 rules here.
