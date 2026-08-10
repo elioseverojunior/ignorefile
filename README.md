@@ -9,14 +9,14 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 Manage `.gitignore` as structured, reviewable configuration instead of a
 hand-edited flat file.
 
-[![CI](https://github.com/elioseverojunior/ignorefile/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/elioseverojunior/ignorefile/actions/workflows/ci.yml)
+[![CICD](https://github.com/elioseverojunior/ignorefile/actions/workflows/cicd.yml/badge.svg?branch=main)](https://github.com/elioseverojunior/ignorefile/actions/workflows/cicd.yml)
 [![Mise](https://github.com/elioseverojunior/ignorefile/actions/workflows/mise.yml/badge.svg?branch=main)](https://github.com/elioseverojunior/ignorefile/actions/workflows/mise.yml)
 [![CodeQL](https://github.com/elioseverojunior/ignorefile/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/elioseverojunior/ignorefile/actions/workflows/codeql.yml)
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/elioseverojunior/ignorefile/badge)](https://scorecard.dev/viewer/?uri=github.com/elioseverojunior/ignorefile)
 [![Scorecards](https://github.com/elioseverojunior/ignorefile/actions/workflows/scorecards.yml/badge.svg?branch=main)](https://github.com/elioseverojunior/ignorefile/actions/workflows/scorecards.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![MSRV 1.95](https://img.shields.io/badge/MSRV-1.95-orange.svg)](rust-toolchain.toml)
+[![MSRV 1.88](https://img.shields.io/badge/MSRV-1.88-orange.svg)](Cargo.toml)
 
 > **Status: pre-alpha.** All five surfaces work: import a `.gitignore`, keep it
 > as TOML, JSON or YAML, generate it back, and reach it from the CLI, a browser,
@@ -112,9 +112,32 @@ three encodings must be interchangeable.
 [docs/design/config-format.md](docs/design/config-format.md) records the
 evidence.
 
+A fourth field, `header`, carries a verbatim comment block above the `###`
+banner -- which is where a licence header goes. This repository's own
+[ignorefile.toml](ignorefile.toml) uses it:
+
+```toml
+header = """
+SPDX-FileCopyrightText: ignorefile contributors
+
+SPDX-License-Identifier: MIT OR Apache-2.0"""
+```
+
+Each of its lines renders as its own `#` line, so an empty line becomes a bare
+`#` and the block reproduces byte for byte. It sits on the configuration rather
+than on a section because a licence header is the same for every file generated
+from one config.
+
+Note that the lines are **not** indented to match the surrounding TOML. Every
+line is emitted verbatim after a `# `, so an indent here would render
+`#   SPDX-FileCopyrightText: ...`, which no SPDX reader recognises.
+
 **Import is lossless or it refuses.** Rather than quietly changing which files
 git ignores, `import` re-renders the config it just built and compares it to the
-source, reporting the first differing line if they disagree.
+source, reporting the first differing line if they disagree. `ignorefile fmt` is
+the answer when it refuses: it rewrites the file into the one canonical layout
+import reproduces, as a diff you can review. Only comments and blank lines ever
+move, so the set of paths git ignores is identical either side.
 
 **Editors get a schema.** Point them at
 [schema/ignorefile.schema.json](schema/ignorefile.schema.json); for a
@@ -142,7 +165,14 @@ ignorefile generate
 
 # Check the config without writing anything.
 ignorefile validate
+
+# Rewrite a .gitignore into the canonical form import accepts.
+# --check reports without writing, for CI.
+ignorefile fmt
+ignorefile fmt --check
 ```
+
+Every command is also available under the short alias `ign`.
 
 Both paths are configurable, and the encoding follows the config's extension:
 
@@ -160,15 +190,23 @@ Not yet published. Build from source:
 ```sh
 git clone https://github.com/elioseverojunior/ignorefile
 cd ignorefile
-mise run setup          # provisions the pinned toolchain
-mise run build --release
+mise run setup            # provisions the pinned toolchain
+mise run build:install    # release build, both binaries into ~/.local/bin
 ```
 
-The binary lands at `target/release/ignorefile`. `mise run build:setup`
-also copies it into `~/.local/bin/`.
+That ships **two** names for one executable, `ignorefile` and the short alias
+`ign`; cargo has no first-class alias, so they are two `[[bin]]` targets over the
+same `src/main.rs`.
 
-Note that the local build sets `-C target-cpu=native`, so the resulting binary
-is tuned to your machine and is not portable to other CPUs.
+To build without installing, use cargo directly:
+
+```sh
+cargo build --release     # -> target/release/ignorefile and target/release/ign
+```
+
+`mise run build` is a **debug** build of the whole workspace and takes no
+`--release` flag -- passing one is silently ignored, and nothing lands in
+`target/release/`.
 
 ## Surfaces
 
@@ -176,11 +214,11 @@ One crate per surface, each with its own README:
 
 | Crate | Role | Status |
 | --- | --- | --- |
-| [`ignorefile`](crates/ignorefile) | core library: parse, model, render, match | working |
-| [`ignorefile-cli`](crates/ignorefile-cli) | the CLI; ships `ignorefile` and `ign` | working |
-| [`ignorefile-wasm`](crates/ignorefile-wasm) | WebAssembly bindings for browser use | working |
-| [`ignorefile-mcp`](crates/ignorefile-mcp) | MCP server, so agents can manage ignore rules | working |
-| [`ignorefile-lsp`](crates/ignorefile-lsp) | Language Server for editor diagnostics | working |
+| [`ignorefile`](crates/ignorefile/README.md) | core library: parse, model, render, match | working |
+| [`ignorefile-cli`](crates/ignorefile-cli/README.md) | the CLI; ships `ignorefile` and `ign` | working |
+| [`ignorefile-wasm`](crates/ignorefile-wasm/README.md) | WebAssembly bindings for browser use | working |
+| [`ignorefile-mcp`](crates/ignorefile-mcp/README.md) | MCP server, so agents can manage ignore rules | working |
+| [`ignorefile-lsp`](crates/ignorefile-lsp/README.md) | Language Server for editor diagnostics | working |
 
 ```mermaid
 graph TD

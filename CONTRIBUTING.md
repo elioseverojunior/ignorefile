@@ -29,9 +29,9 @@ prohibited and result in the pull request being closed.
 ```sh
 git clone https://github.com/elioseverojunior/ignorefile
 cd ignorefile
-mise run setup          # provisions the pinned toolchain and every tool
-mise run hooks-install  # install the hk git hooks
-mise run doctor         # verify; reports MISSING for anything absent
+mise run setup               # provisions the pinned toolchain and every tool
+mise run git:hooks:install   # install the hk git hooks
+mise run doctor              # verify; reports MISSING for anything absent
 ```
 
 [mise](https://mise.jdx.dev) is the only prerequisite. It reads the Rust version
@@ -42,11 +42,15 @@ from `rust-toolchain.toml` and installs everything else from `mise.toml`.
 The project is strictly test-driven. Write the failing test first.
 
 ```sh
-mise run test        # cargo-nextest; does NOT run doctests
-mise run test:doc    # the doctest half of the suite
-mise run lint        # fmt:check + clippy, read-only
-mise run pr-ready    # auto-format, then check everything
+mise run cargo:test      # cargo-nextest; does NOT run doctests
+mise run cargo:test:doc  # the doctest half of the suite
+mise run lint            # fmt:check + clippy, read-only
+mise run pr:ready        # auto-format, then check everything
 ```
+
+The first two are the inner loop, not a gate: `cargo:test` skips doctests and
+measures no coverage. `mise run coverage` is the gate, and it runs both halves
+plus the 100% threshold in one pass.
 
 Work on a feature branch in its own worktree, and rebase rather than merge so
 `main` stays linear:
@@ -55,19 +59,19 @@ Work on a feature branch in its own worktree, and rebase rather than merge so
 git worktree add worktrees/my-feature -b my-feature
 ```
 
-Before you push, `mise run pr-ready` should be clean. `mise run ci` runs the
+Before you push, `mise run pr:ready` should be clean. `mise run ci` runs the
 full pipeline, including the licence, security and coverage gates.
 [docs/RUNBOOK.md](docs/RUNBOOK.md) has the diagnosis steps for each gate, and the
-list of commands that fail by design because CI does not exist yet.
+list of commands that fail by design because what they need does not exist yet.
 
 Things that will surprise you if you have not read
 [AGENTS.md](AGENTS.md#gotchas):
 
 - Warnings are hard errors, and setting `RUSTFLAGS` silently disables that gate.
 - The coverage threshold is 100%.
-- MSRV is 1.95 even though the toolchain is 1.97, so clippy rejects newer APIs.
+- MSRV is 1.88 even though the toolchain is 1.97, so clippy rejects newer APIs.
 - `committed.toml`, `.gitmessage` and part of `cliff.toml` are generated from
-  `commit-types.toml`. Edit the source, then run `mise run commit-config`.
+  `commit-types.toml`. Edit the source, then run `mise run commit:config`.
 - Text is ASCII only: no em dash, no unicode arrows.
 
 ## Commits
@@ -80,7 +84,7 @@ in `.gitmessage`.
 feat(cli): add gitignore import subcommand
 ```
 
-`mise run commit-lint` checks a message; the `commit-msg` git hook runs it
+`mise run commit:lint` checks a message; the `commit-msg` git hook runs it
 automatically.
 
 ## Report a bug

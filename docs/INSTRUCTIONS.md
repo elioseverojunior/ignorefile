@@ -232,6 +232,20 @@ The five surfaces are `ignorefile`, `-cli`, `-wasm`, `-mcp` and `-lsp`. The CLI
 package carries the `-cli` suffix so it can be published next to the core crate
 of the same base name, but the executable it ships is plain `ignorefile`.
 
+### The MSRV is 1.88, not the 1.95 the brief asked for
+
+"Cargo allow Rust (1.95)" above is left as written, because this file is the
+record of intent rather than current state. The floor was lowered to 1.88: none
+of the five crates uses an API newer than that, so declaring 1.95 turned every
+routine toolchain bump into an invisible breaking change for consumers while
+excluding them for no gain. Edition 2024 needs only 1.85, so it is not the
+constraint either.
+
+The live numbers are `rust-version` in `Cargo.toml` and `msrv` in
+`.clippy.toml`, and they must stay equal. `cicd.yml`'s MSRV job compiles every
+publishable crate at the declared floor on each push, which is what stops the
+claim drifting back into fiction.
+
 ### "Fully autonomous work" versus the contribution policy
 
 These read as contradictory and are not. `guidelines/CONTRIBUTION.md` tells

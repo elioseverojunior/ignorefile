@@ -23,7 +23,7 @@ written first and the phase is done when they pass with the coverage gate at
 Done.
 
 - Virtual workspace with one crate per surface.
-- Toolchain pinned (Rust 1.97, MSRV 1.95, edition 2024), warnings as errors,
+- Toolchain pinned (Rust 1.97, MSRV 1.88, edition 2024), warnings as errors,
   `unsafe_code = "deny"`.
 - Every quality gate wired as a `mise` task: fmt, clippy, nextest, doctests,
   coverage, `cargo audit`, `cargo deny`, `cargo vet`, gitleaks, REUSE/SPDX.
@@ -263,14 +263,18 @@ have.
 
 ## Cross-cutting, not yet started
 
-- **CI does not exist yet.** There is no `.github/workflows/`, but `mise.toml`
-  already mirrors the pipelines it expects (`ci`, `ci:perf`, `ci:nightly`), and
-  `mise run act`, `mise run actionlint`, `mise run actions:pins`,
-  `mise run gh:branch:protect` and `mise run codecov` all assume workflow files.
-  Writing those workflows is the single largest gap in the repository.
+- **CI exists.** `.github/workflows/cicd.yml` runs setup, version, lint, SAST,
+  MSRV, tests-with-coverage, build and release, calling `publish.yml` for the
+  crates.io half; `mise run ci` mirrors the parts that can run locally.
+  Two workflows are still unreachable, because they were adapted from another
+  project and reference paths never ported here: `gh-pages.yml` needs the
+  `docs/` VitePress site, and `performance.yml` needs `scripts/bench-to-json.py`.
+  Neither runs on push. `publish.yml` also calls a `crates:dev-only` mise task
+  that is not defined -- harmless today, since no crate here sets
+  `publish = false`, but it fails the moment a release runs.
 - **No benchmarks yet**, though `Criterion.toml`, `mise run bench` and
   `mise run bench:bencher` are configured. The performance gate has nothing to
-  measure until the parser exists.
+  measure until there is a `benches/` target.
 - **No fuzz targets yet.** `mise run fuzz` and `mise run fuzz:all` expect
   `crates/ignorefile-fuzz`. A parser over untrusted repository input is
   exactly what fuzzing is for; this should land with Phase 1.

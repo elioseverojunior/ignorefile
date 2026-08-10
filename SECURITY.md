@@ -57,14 +57,16 @@ Not promises -- these run in CI on every push, and you can read them in
 | `unsafe_code = "deny"` workspace-wide; no escape hatch | `Cargo.toml` |
 | `unwrap`/`expect` denied in production code (a panic is a DoS) | `.clippy.toml` |
 | Warnings are hard errors, including rustdoc | `.cargo/config.toml` |
-| RustSec advisory scan (`cargo audit`) | CI, Supply Chain job |
-| Licence, ban and source policy (`cargo deny`) | CI, Supply Chain job |
-| Secret scanning (gitleaks) | CI, Secrets Scan job |
-| Static analysis (CodeQL) | `codeql.yml` |
+| RustSec advisory scan (`cargo audit`) | `hk` `audit` step, run by the Lint job |
+| Licence, ban and source policy (`cargo deny`) | `hk` `deny` step, run by the Lint job |
+| Secret scanning (gitleaks) | `hk` `gitleaks` step, run by the Lint job |
+| Compiling at the declared MSRV, so `rust-version` cannot drift upward silently | `cicd.yml`, MSRV job |
+| Static analysis (CodeQL) | `cicd.yml` SAST job on every push; `codeql.yml` weekly |
 | OpenSSF Scorecard | `scorecards.yml` |
-| SLSA L3 provenance and Sigstore signing of release artifacts | `release.yml` |
+| SLSA L3 provenance and Sigstore signing of release artifacts | `publish.yml` |
+| A human reviewer required before anything reaches crates.io | `crates-io` deployment environment |
 | Dependency updates and GitHub secret-scanning push protection | Dependabot, repo settings |
-| 100% test coverage gate, including doctests | `mise run coverage:tarpaulin` |
+| 100% test coverage gate, including doctests | `mise run coverage` |
 
 Correctness is a security property in this project. The differential test in
 `crates/ignorefile/tests/differential.rs` checks agreement with `git
