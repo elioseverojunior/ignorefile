@@ -13,6 +13,17 @@
 //! and anchor-sensitive, so a model that normalizes its input changes which
 //! files git ignores. See `docs/ROADMAP.md`.
 
+/// Compiles the usage example in `README.md` as a doctest.
+///
+/// `cfg(doctest)` means this module exists only while rustdoc is collecting
+/// doctests: it adds nothing to the rendered documentation and nothing to a
+/// normal build. Without it the README sample is never compiled, so it can
+/// drift from the API it demonstrates while still looking correct -- which is
+/// the one kind of documentation rot no gate in this repository would catch.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+mod readme {}
+
 mod config;
 mod convert;
 mod error;

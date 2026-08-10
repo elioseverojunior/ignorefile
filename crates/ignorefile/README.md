@@ -40,10 +40,16 @@ flowchart LR
     model -->|"render"| text
 ```
 
-`Config::try_from` is the only fallible edge. It renders the configuration it
-just built and compares it against the source; if they differ it returns
+Three of those edges return a `Result`, but only one of them can REFUSE input
+that is otherwise fine. `Config::try_from` renders the configuration it just
+built and compares it against the source; if they differ it returns
 `Error::NotCanonical` naming the first differing line, rather than silently
-reformatting the file.
+reformatting the file. `encode` and `decode` are fallible for representation
+reasons instead -- text that is not valid TOML, JSON or YAML, or that breaks a
+rule `Config::validate` enforces. (`encode` cannot actually fail for a `Config`,
+which holds only strings, integers and sequences; the signature is fallible
+because the encoders are fallible in general.) `GitIgnore::parse`, `render` and
+`GitIgnore::from` cannot fail at all.
 
 That difference is always a formatting one. Patterns reach the configuration
 verbatim and in order, so only comments and blank lines can move; a refused file
@@ -113,7 +119,7 @@ would be reported by `cargo audit`.
 
 `encode` emits TOML whose key order already matches what a formatter would
 produce: keys sorted alphabetically, values ahead of tables. So `Config` declares
-`name` before `version`, `Section` declares `level, name, note`, and `Rule`
+`header, name, version`, `Section` declares `level, name, note`, and `Rule`
 declares `add, ignore, note`. Field order is serialization order, and getting it
 wrong means every `import` leaves a file the project's formatter immediately
 rewrites.
