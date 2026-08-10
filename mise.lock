@@ -107,10 +107,6 @@ backend = "cargo:cargo-edit"
 version = "0.13.2"
 backend = "cargo:cargo-fuzz"
 
-[[tools."cargo:cargo-llvm-cov"]]
-version = "0.8.7"
-backend = "cargo:cargo-llvm-cov"
-
 [[tools."cargo:cargo-machete"]]
 version = "0.9.2"
 backend = "cargo:cargo-machete"
@@ -139,6 +135,10 @@ backend = "cargo:cargo-sort"
 version = "0.37.0"
 backend = "cargo:cargo-tarpaulin"
 
+[[tools."cargo:cargo-update"]]
+version = "22.1.1"
+backend = "cargo:cargo-update"
+
 [[tools."cargo:cargo-wizard"]]
 version = "0.2.3"
 backend = "cargo:cargo-wizard"
@@ -146,6 +146,10 @@ backend = "cargo:cargo-wizard"
 [[tools."cargo:committed"]]
 version = "1.1.11"
 backend = "cargo:committed"
+
+[[tools."cargo:comply"]]
+version = "0.1.0-9"
+backend = "cargo:comply"
 
 [[tools."cargo:flamegraph"]]
 version = "0.6.13"
