@@ -5,18 +5,19 @@
 name: Scorecards
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref_name }}
+  group: scorecards-${{ github.ref_name }}
   cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
 
-# The `schedule` trigger is what makes the OpenSSF Scorecard BADGE work, not just
-# the analysis. `publish_results: true` below only reaches api.securityscorecards.dev
-# for repositories whose Scorecard workflow runs on a schedule against the default
-# branch; with `workflow_dispatch` alone the run succeeds, publishes nothing, and
-# the badge renders "invalid repo path". Weekly, offset from nightly.yml's 04:00.
+# `schedule` and `push` are what make results PUBLISHABLE. `publish_results: true`
+# only uploads to the OSSF API from a scheduled run or a push on the default
+# branch -- a `branch_protection_rule` run analyses fine but publishes nothing,
+# so scorecard.dev had no data for this repo and reported "invalid repo path".
 on:
-  branch_protection_rule:
   schedule:
-    - cron: "26 7 * * 2"
+    - cron: "0 7 * * 1"
+  push:
+    branches: [main]
+  branch_protection_rule:
   workflow_dispatch:
 
 # Top-level read-all; jobs that upload results need additional write permissions.
@@ -42,6 +43,11 @@ jobs:
       - name: "Checkout code"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          submodules: "recursive"
+          fetch-depth: 0
+          fetch-tags: "true"
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN || github.token }}
           persist-credentials: false
 
       - name: "Run analysis"
@@ -74,6 +80,6 @@ jobs:
           path: results.sarif
           retention-days: 5
 
-      - uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
         with:
           sarif_file: results.sarif

@@ -33,7 +33,7 @@ inputs:
   repo_token:
     description: "INPUT: GitHub token with read access"
     required: false
-    default: ${{ github.token }}
+    default: ${{ secrets.GITHUB_TOKEN || github.token }}
 
   publish_results:
     description: "INPUT: Publish results"
@@ -53,7 +53,7 @@ inputs:
   internal_default_token:
     description: "INPUT: Default GitHub token. (Internal purpose only, not intended for developers to set. Used for pull requests configured with a PAT)."
     required: false
-    default: ${{ github.token }}
+    default: ${{ secrets.GITHUB_TOKEN || github.token }}
 
 branding:
   icon: "mic"

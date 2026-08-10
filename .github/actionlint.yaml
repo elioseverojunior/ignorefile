@@ -27,8 +27,22 @@ self-hosted-runner:
 # string at runtime. Add new repository/organization variables here as they are
 # introduced. Set to `null` to disable the check entirely.
 config-variables:
+  # Repository/organization variables set in Settings -> Actions.
   - RUNS_ON
+  - RUNS_ON_ARM64 # labeler.yml prefers it, falling back to RUNS_ON
   - RUST_COVERAGE_THRESHOLD
+  - CRATES_NAME # publish.yml, defaulting to the repository name
+  - GITVERSION_SPEC # cicd.yml / version.yml, defaulting to '6.x'
+  # NOT repository variables: `mise run act:setup` writes both into
+  # `.act/.vars`, which is the only channel feeding the `vars` context under
+  # nektos/act. They are undefined on GitHub by design -- ACT gates the
+  # copy-the-working-tree checkout, and UPLOAD_ARTIFACTS disables an upload
+  # act's artifact server rejects. Both are compared with `!=`/`==` against a
+  # string, so an empty value on GitHub takes the correct branch. They are
+  # declared here so this list stays exhaustive: with the check enabled, an
+  # omission is indistinguishable from a typo.
+  - ACT
+  - UPLOAD_ARTIFACTS
 
 # Path-specific configurations.
 paths:
