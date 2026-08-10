@@ -3,10 +3,15 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 
 # REUSE-IgnoreStart
+# Every line of `header` is rendered VERBATIM after a `# `, so leading
+# whitespace here becomes leading whitespace in .gitignore. Two stray spaces
+# once made this emit `#   SPDX-FileCopyrightText: ...`, which no SPDX reader
+# recognises -- and `mise run gitignore:check` is what catches it. Do not indent
+# these lines to match the surrounding TOML; taplo will not add or remove them.
 header = """
-  SPDX-FileCopyrightText: ignorefile contributors
+SPDX-FileCopyrightText: ignorefile contributors
 
-  SPDX-License-Identifier: MIT OR Apache-2.0"""
+SPDX-License-Identifier: MIT OR Apache-2.0"""
 # REUSE-IgnoreEnd
 name = "Ignored"
 version = 1
